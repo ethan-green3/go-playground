@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"example.com/crypto-tracker/models"
@@ -8,9 +9,15 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Failed to load .env file")
+	}
 	InitDatabase()
 
 	router := gin.Default()
@@ -21,31 +28,34 @@ func main() {
 	})
 
 	// GET /portfolio route
-	router.GET("/portfolio", func(c *gin.Context) {
+	router.GET("/portfolio", AuthMiddleware(), func(c *gin.Context) {
 		var coins []models.Coin
 		result := DB.Find(&coins)
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			c.JSON(500, gin.H{"error": result.Error.Error()})
 			return
 		}
 
-		c.JSON(http.StatusOK, coins)
+		c.JSON(200, coins)
 	})
 
-	router.POST("/addcoin", func(c *gin.Context) {
+	router.POST("/addcoin", AuthMiddleware(), func(c *gin.Context) {
 		var coin models.Coin
 		if err := c.ShouldBindJSON(&coin); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(400, gin.H{"error": err.Error()})
 			return
 		}
 
-		result := DB.Create(&coin)
-		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		// Get userID from JWT middleware
+		userID := c.GetUint("userID")
+		coin.UserID = userID
+
+		if err := DB.Create(&coin).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Failed to add coin"})
 			return
 		}
 
-		c.JSON(http.StatusCreated, coin)
+		c.JSON(201, coin)
 	})
 
 	router.DELETE("/portfolio/:symbol", func(c *gin.Context) {
@@ -117,7 +127,17 @@ func main() {
 			return
 		}
 
-		c.JSON(200, gin.H{"token": token})
+		// Fetch portfolio for this user
+		var coins []models.Coin
+		if err := DB.Where("user_id = ?", user.ID).Find(&coins).Error; err != nil {
+			c.JSON(500, gin.H{"error": "Failed to retrieve portfolio"})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"token":     token,
+			"portfolio": coins,
+		})
 	})
 
 	router.Run("localhost:8080")
