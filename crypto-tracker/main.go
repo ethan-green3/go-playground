@@ -20,42 +20,46 @@ func main() {
 
 	// GET /portfolio route
 	router.GET("/portfolio", func(c *gin.Context) {
-		c.JSON(http.StatusOK, models.Portfolio)
+		var coins []models.Coin
+		result := DB.Find(&coins)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, coins)
 	})
 
 	router.POST("/addcoin", func(c *gin.Context) {
-		var newCoin models.Coin
-
-		if err := c.ShouldBindJSON(&newCoin); err != nil {
+		var coin models.Coin
+		if err := c.ShouldBindJSON(&coin); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		models.Portfolio = append(models.Portfolio, newCoin)
-		c.JSON(http.StatusCreated, newCoin)
+		result := DB.Create(&coin)
+		if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			return
+		}
+
+		c.JSON(http.StatusCreated, coin)
 	})
 
 	router.DELETE("/portfolio/:symbol", func(c *gin.Context) {
 		symbol := c.Param("symbol")
-		updated := []models.Coin{}
-		found := false
+		result := DB.Where("symbol = ?", symbol).Delete(&models.Coin{})
 
-		for _, coin := range models.Portfolio {
-			if coin.Symbol != symbol {
-				updated = append(updated, coin)
-			} else {
-				found = true
-			}
-		}
-
-		if !found {
-			c.JSON(http.StatusNotFound, gin.H{"error": "coin not found"})
+		if result.RowsAffected == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Coin not found"})
+			return
+		} else if result.Error != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 			return
 		}
 
-		models.Portfolio = updated
 		c.JSON(http.StatusOK, gin.H{"message": symbol + " removed"})
 	})
 
-	router.Run(":8080")
+	router.Run("localhost:8080")
 }
