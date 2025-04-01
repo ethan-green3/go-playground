@@ -9,6 +9,8 @@ import (
 )
 
 func main() {
+	InitDatabase()
+
 	router := gin.Default()
 
 	// Basic test route
