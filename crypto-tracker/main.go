@@ -33,5 +33,27 @@ func main() {
 		c.JSON(http.StatusCreated, newCoin)
 	})
 
+	router.DELETE("/portfolio/:symbol", func(c *gin.Context) {
+		symbol := c.Param("symbol")
+		updated := []models.Coin{}
+		found := false
+
+		for _, coin := range models.Portfolio {
+			if coin.Symbol != symbol {
+				updated = append(updated, coin)
+			} else {
+				found = true
+			}
+		}
+
+		if !found {
+			c.JSON(http.StatusNotFound, gin.H{"error": "coin not found"})
+			return
+		}
+
+		models.Portfolio = updated
+		c.JSON(http.StatusOK, gin.H{"message": symbol + " removed"})
+	})
+
 	router.Run(":8080")
 }
